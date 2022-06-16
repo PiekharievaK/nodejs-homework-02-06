@@ -7,7 +7,7 @@ const auth = require("../../middlewares/auth")
 
 
 require("dotenv").config();
-router.post("/singup", ctrl.auth.singup);
+router.post("/signup", ctrl.auth.signup);
 
 router.post("/login", ctrl.auth.login);
 

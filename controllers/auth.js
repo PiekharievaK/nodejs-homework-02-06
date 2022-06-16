@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const { User, userValidate } = require("../models/user");
 const { SECRET_KEY } = process.env;
 
-const singup = async (req, res, next) => {
+const signup = async (req, res, next) => {
   const { error } = userValidate.validate(req.body);
 
   try {
@@ -12,8 +12,8 @@ const singup = async (req, res, next) => {
     }
 
     const { email } = req.body;
-    const user = await User.findOne({ email });
-    if (user) {
+    const isUser = await User.findOne({ email });
+    if (isUser) {
       throw new Error("Email in use");
     }
     const hashPassword = bcrypt.hashSync(
@@ -21,8 +21,11 @@ const singup = async (req, res, next) => {
       bcrypt.genSaltSync(10)
     );
     req.body.password = hashPassword;
-    const result = await User.create(req.body);
-    res.status(201).json({ user: result });
+    const user = await User.create(req.body);
+    res.status(201).json({ user: {
+        email,
+        subscription: user.subscription
+    } });
   } catch (e) {
     res.status(409).json({ message: e.message });
     next(e);
@@ -39,7 +42,7 @@ const login = async (req, res, next) => {
 
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-    console.log(bcrypt.compareSync(password, user.password));
+
     if (!user || !bcrypt.compareSync(password, user.password)) {
       throw new Error("Email or password is wrong");
     }
@@ -48,9 +51,13 @@ const login = async (req, res, next) => {
       expiresIn: "1h",
     });
     await User.findByIdAndUpdate(user._id, { token });
-    req.body.token = token;
-
-    res.status(200).json(req.body);
+   
+    res.status(200).json({
+        token,
+        user: {
+          email,
+          subscription: user.subscription}
+        });
   } catch (e) {
     res.status(401).json({ message: e.message });
     next(e);
@@ -84,7 +91,7 @@ const current = async (req, res, next)=>{
    }})
    }
 module.exports = {
-  singup,
+  signup,
   login,
   logout,
   current
