@@ -1,6 +1,6 @@
 const express = require("express");
 const ctrl = require("../../controllers");
-const auth = require("../../middlewares/auth")
+const {auth} = require("../../middlewares")
 
 const router = express.Router();
 
