@@ -13,21 +13,19 @@ const contactSchema = Schema(
     phone: {
       type: String,
     },
-    
-    
+
     favorite: {
       type: Boolean,
       default: false,
     },
     owner: {
-    type: Schema.Types.ObjectId,
-    ref: "user",
-    required: true
+      type: Schema.Types.ObjectId,
+      ref: "user",
+      required: true,
     },
-   },
+  },
   { versionKey: false, timestamps: true }
 );
-
 
 const addValidate = Joi.object({
   name: Joi.string().min(3).max(30).required(),

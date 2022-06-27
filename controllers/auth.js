@@ -3,9 +3,12 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const fs = require("fs/promises");
 const Jimp = require("jimp");
-const { User, userValidate } = require("../models/user");
-const { SECRET_KEY } = process.env;
 const gravatar = require("gravatar");
+const { v4 } = require("uuid");
+const { SECRET_KEY } = process.env;
+const { User, userValidate } = require("../models/user");
+const { verifyValidate } = require("../models/user");
+const { sendEmail, verificationLetter } = require("../helpers/");
 
 const signup = async (req, res, next) => {
   const { error } = userValidate.validate(req.body);
@@ -24,14 +27,24 @@ const signup = async (req, res, next) => {
       req.body.password,
       bcrypt.genSaltSync(10)
     );
-    req.body.password = hashPassword;
-    req.body.avatarURL = gravatar.url(email);
-    const user = await User.create(req.body);
+    const password = hashPassword;
+    const avatarURL = gravatar.url(email);
+    const verificationToken = v4();
+    const user = await User.create({
+      email,
+      password,
+      avatarURL,
+      verificationToken,
+    });
+
+    await sendEmail(verificationLetter(email, verificationToken));
+
     res.status(201).json({
       user: {
         email,
         subscription: user.subscription,
         avatarURL: user.avatarURL,
+        linkToVerify: `http://localhost:3000/users/verify/${verificationToken}`,
       },
     });
   } catch (e) {
@@ -51,8 +64,8 @@ const login = async (req, res, next) => {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
 
-    if (!user || !bcrypt.compareSync(password, user.password)) {
-      throw new Error("Email or password is wrong");
+    if (!user || !user.verify || !bcrypt.compareSync(password, user.password)) {
+      throw new Error("Email or password is wrong or email is not verify");
     }
 
     const token = jwt.sign({ id: user._id }, SECRET_KEY, {
@@ -87,6 +100,7 @@ const logout = async (req, res, next) => {
 const current = async (req, res, next) => {
   if (!req.user) {
     res.ststus(401).json({ message: "Not authorized" });
+    return;
   }
   console.log(req.user);
   const { email, subscription } = req.user;
@@ -135,10 +149,58 @@ const avatars = async (req, res, next) => {
   }
 };
 
+const verify = async (req, res, next) => {
+  const { verificationToken } = req.params;
+  const user = await User.findOne({ verificationToken });
+  try {
+    if (!user) {
+      throw new Error();
+    }
+    await User.findByIdAndUpdate(user._id, {
+      verify: true,
+      verificationToken: null,
+    });
+
+    res.status(200).json({
+      message: `User ${user.email} is verify`,
+    });
+  } catch (e) {
+    res.status(404).json({ message: "Not Found" });
+  }
+};
+
+const resendVerify = async (req, res, next) => {
+  const email = req.body.email;
+  const { error } = verifyValidate.validate({ email });
+  if (error) {
+    res.status(400).json(error.message);
+    return;
+  }
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new Error(`Email: "${email}" is not registered yet`);
+    }
+    if (user.verify) {
+      throw new Error("Verification has already been passed");
+    }
+
+    await sendEmail(verificationLetter(email, user.verificationToken));
+    res.status(200).json({
+      message: "Verification mail is send again",
+      linkToVerify: `http://localhost:3000/users/verify/${user.verificationToken}`,
+    });
+  } catch (e) {
+    res.status(400).json({ message: e.message });
+  }
+};
+
 module.exports = {
   signup,
   login,
   logout,
   current,
   avatars,
+  verify,
+  resendVerify,
 };
